@@ -7,7 +7,7 @@ API_ID = int(os.environ.get("API_ID"))
 API_HASH = os.environ.get("API_HASH")
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
-app = Client("big_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+app = Client("ultra_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
 user_files = {}
 user_mode = {}
@@ -15,140 +15,177 @@ thumbs = {}
 waiting_thumb = {}
 auto_rename = {}
 
+# MAIN MENU
+def main_menu():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("✏️ Rename", callback_data="rename"),
+         InlineKeyboardButton("📄 Info", callback_data="info")],
+        [InlineKeyboardButton("🖼️ Thumbnail", callback_data="thumb"),
+         InlineKeyboardButton("⚙️ Settings", callback_data="settings")],
+        [InlineKeyboardButton("❓ Help", callback_data="help")]
+    ])
+
 # START
 @app.on_message(filters.command("start"))
 async def start(client, message):
-    buttons = InlineKeyboardMarkup([
-        [InlineKeyboardButton("✏️ Rename", callback_data="rename")],
-        [InlineKeyboardButton("📄 File Info", callback_data="info")],
-        [InlineKeyboardButton("⚙️ Settings", callback_data="settings")],
-        [InlineKeyboardButton("❓ Help", callback_data="help")]
-    ])
-    await message.reply("👋 Welcome to BIG PRO BOT", reply_markup=buttons)
+    await message.reply("🔥 ULTRA BOT\nChoose option:", reply_markup=main_menu())
 
-# BUTTONS
+# BUTTON HANDLER
 @app.on_callback_query()
 async def callback(client, query):
+    uid = query.message.chat.id
     data = query.data
 
+    # RENAME
     if data == "rename":
-        user_mode[query.message.chat.id] = "rename"
+        user_mode[uid] = "rename"
         await query.message.reply(
-            "✏️ Rename Mode\n\n"
-            "1. Send file\n"
-            "2. Send new name\n\n"
-            "Use /setthumb for thumbnail"
+            "✏️ Rename Mode\n\nSend file → then send new name",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back")]])
         )
 
+    # INFO
     elif data == "info":
-        user_mode[query.message.chat.id] = "info"
-        await query.message.reply("📄 Send file")
+        user_mode[uid] = "info"
+        await query.message.reply(
+            "📄 Send file to get info",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="back")]])
+        )
 
+    # THUMB MENU
+    elif data == "thumb":
+        await query.message.reply(
+            "🖼️ Thumbnail Settings",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("📸 Set Thumbnail", callback_data="setthumb")],
+                [InlineKeyboardButton("👁 View Thumbnail", callback_data="viewthumb")],
+                [InlineKeyboardButton("❌ Delete Thumbnail", callback_data="delthumb")],
+                [InlineKeyboardButton("🔙 Back", callback_data="back")]
+            ])
+        )
+
+    # SET THUMB
+    elif data == "setthumb":
+        waiting_thumb[uid] = True
+        await query.message.reply("📸 Send a photo now")
+
+    # VIEW THUMB
+    elif data == "viewthumb":
+        if uid in thumbs:
+            await query.message.reply_photo(thumbs[uid])
+        else:
+            await query.message.reply("No thumbnail set")
+
+    # DELETE THUMB
+    elif data == "delthumb":
+        if uid in thumbs:
+            os.remove(thumbs[uid])
+            del thumbs[uid]
+            await query.message.reply("❌ Thumbnail deleted")
+        else:
+            await query.message.reply("No thumbnail")
+
+    # SETTINGS
     elif data == "settings":
         await query.message.reply(
-            "⚙️ Settings:\n"
-            "/setthumb\n"
-            "/delthumb\n"
-            "/autorename name.mp4\n"
-            "/cancel"
+            "⚙️ Settings",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🤖 Auto Rename", callback_data="autorename")],
+                [InlineKeyboardButton("❌ Cancel Process", callback_data="cancel")],
+                [InlineKeyboardButton("🔙 Back", callback_data="back")]
+            ])
         )
 
+    # AUTO RENAME BUTTON
+    elif data == "autorename":
+        await query.message.reply("Send name for auto rename")
+
+    # CANCEL
+    elif data == "cancel":
+        user_files.pop(uid, None)
+        user_mode.pop(uid, None)
+        await query.message.reply("❌ Cancelled")
+
+    # HELP
     elif data == "help":
         await query.message.reply(
-            "❓ Help:\n\n"
-            "Rename → send file → send name\n"
-            "Info → send file\n"
-            "Thumbnail → /setthumb\n"
-            "Cancel → /cancel"
+            "❓ Help:\n\nRename → Send file → Send name\nThumbnail → Use buttons\nNo commands needed"
         )
+
+    # BACK
+    elif data == "back":
+        await query.message.reply("🏠 Main Menu", reply_markup=main_menu())
 
 # PROGRESS
 async def progress(current, total, message, start):
     percent = current * 100 / total
-    await message.edit(f"📊 {percent:.1f}%")
+    try:
+        await message.edit(f"📊 {percent:.1f}%")
+    except:
+        pass
 
-# FILE RECEIVE
+# FILE HANDLER
 @app.on_message(filters.document | filters.video | filters.audio)
 async def file_handler(client, message):
-    mode = user_mode.get(message.chat.id)
+    uid = message.chat.id
+    mode = user_mode.get(uid)
 
     msg = await message.reply("📥 Downloading...")
-    file_path = await message.download()
+    start = time.time()
+
+    file_path = await message.download(progress=progress, progress_args=(msg, start))
 
     if mode == "rename":
-        user_files[message.chat.id] = file_path
+        user_files[uid] = file_path
         await msg.edit("✏️ Send new file name")
 
     elif mode == "info":
-        size = os.path.getsize(file_path) / (1024*1024)
-        await msg.edit(
-            f"📄 Name: {os.path.basename(file_path)}\n"
-            f"📦 Size: {size:.2f} MB"
-        )
+        size = os.path.getsize(file_path) / (1024 * 1024)
+        await msg.edit(f"📄 {os.path.basename(file_path)}\n📦 {size:.2f} MB")
         os.remove(file_path)
 
-# RENAME
+# SAVE THUMB (FIXED)
+@app.on_message(filters.photo)
+async def save_thumb(client, message):
+    uid = message.chat.id
+    if waiting_thumb.get(uid):
+        file = await message.download()
+        thumbs[uid] = file
+        waiting_thumb.pop(uid)
+        await message.reply("✅ Thumbnail saved successfully!")
+
+# TEXT HANDLER (Rename + Auto Rename)
 @app.on_message(filters.text)
-async def rename(client, message):
-    if message.chat.id in user_files:
-        old = user_files[message.chat.id]
-        new = auto_rename.get(message.chat.id, message.text)
+async def text_handler(client, message):
+    uid = message.chat.id
+
+    # AUTO RENAME SET
+    if "auto rename" in message.text.lower():
+        return
+
+    # IF WAITING FILE RENAME
+    if uid in user_files:
+        old = user_files[uid]
+        new = auto_rename.get(uid, message.text)
 
         os.rename(old, new)
 
-        await message.reply("📤 Uploading...")
-        await message.reply_document(new, thumb=thumbs.get(message.chat.id))
+        msg = await message.reply("📤 Uploading...")
+        start = time.time()
+
+        await message.reply_document(
+            new,
+            thumb=thumbs.get(uid),
+            progress=progress,
+            progress_args=(msg, start)
+        )
 
         os.remove(new)
-        del user_files[message.chat.id]
+        del user_files[uid]
 
-# AUTO RENAME
-@app.on_message(filters.command("autorename"))
-async def auto(client, message):
-    text = message.text.split(" ", 1)
-
-    if len(text) < 2:
-        return await message.reply("Usage: /autorename name.mp4")
-
-    auto_rename[message.chat.id] = text[1]
-    await message.reply(f"✅ Auto rename set: {text[1]}")
-
-# CANCEL
-@app.on_message(filters.command("cancel"))
-async def cancel(client, message):
-    user_files.pop(message.chat.id, None)
-    user_mode.pop(message.chat.id, None)
-    await message.reply("❌ Process cancelled")
-
-# THUMBNAIL
-@app.on_message(filters.command("setthumb"))
-async def ask_thumb(client, message):
-    waiting_thumb[message.chat.id] = True
-    await message.reply("📸 Send photo")
-
-@app.on_message(filters.photo)
-async def save_thumb(client, message):
-    if waiting_thumb.get(message.chat.id):
-        file = await message.download()
-        thumbs[message.chat.id] = file
-        waiting_thumb.pop(message.chat.id)
-        await message.reply("✅ Thumbnail saved")
-
-@app.on_message(filters.command("delthumb"))
-async def del_thumb(client, message):
-    if message.chat.id in thumbs:
-        os.remove(thumbs[message.chat.id])
-        del thumbs[message.chat.id]
-        await message.reply("❌ Thumbnail deleted")
     else:
-        await message.reply("No thumbnail")
-
-# VIEW THUMB
-@app.on_message(filters.command("viewthumb"))
-async def view_thumb(client, message):
-    if message.chat.id in thumbs:
-        await message.reply_photo(thumbs[message.chat.id])
-    else:
-        await message.reply("No thumbnail")
+        # AUTO RENAME SET
+        auto_rename[uid] = message.text
+        await message.reply(f"✅ Auto rename set: {message.text}")
 
 app.run()
