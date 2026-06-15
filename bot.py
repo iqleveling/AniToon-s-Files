@@ -18,43 +18,56 @@ app = Client(
 
 user_files = {}
 user_mode = {}
-thumbs = {}  # ✅ FIXED POSITION
+thumbs = {}
+waiting_thumb = {}
 
-# Start
+# START
 @app.on_message(filters.command("start"))
 async def start(client, message):
     buttons = InlineKeyboardMarkup([
         [InlineKeyboardButton("✏️ Rename File", callback_data="rename")],
         [InlineKeyboardButton("📄 File Info", callback_data="info")]
     ])
-    await message.reply("👋 Welcome to PRO BOT\nChoose an option:", reply_markup=buttons)
+    await message.reply(
+        "👋 Welcome to PRO BOT\nChoose an option:",
+        reply_markup=buttons
+    )
 
-# Buttons
+# BUTTONS
 @app.on_callback_query()
 async def callback(client, query):
     if query.data == "rename":
         user_mode[query.message.chat.id] = "rename"
+
         await query.message.reply(
-            "✏️ Rename Mode\n\n"
-            "1. Send file\n"
-            "2. Send new name\n\n"
-            "Commands:\n"
-            "/setthumb\n/delthumb\n/viewthumb"
+            "✏️ Rename Mode Activated\n\n"
+            "📌 Steps:\n"
+            "1️⃣ Send a file 📄\n"
+            "2️⃣ Wait for download ⏳\n"
+            "3️⃣ Send new file name ✏️\n\n"
+            "🖼️ Thumbnail Guide:\n"
+            "👉 Send /setthumb\n"
+            "👉 Then send a photo\n\n"
+            "⚙️ Commands:\n"
+            "/setthumb - Set thumbnail\n"
+            "/viewthumb - View thumbnail\n"
+            "/delthumb - Delete thumbnail"
         )
 
     elif query.data == "info":
         user_mode[query.message.chat.id] = "info"
-        await query.message.reply("📤 Send file to get info")
+        await query.message.reply("📄 Send file to get info")
 
-# Progress
+# PROGRESS
 async def progress(current, total, message, start):
     now = time.time()
     diff = now - start
+
     if round(diff % 1) == 0:
         percent = current * 100 / total
         await message.edit(f"📊 {percent:.2f}% completed")
 
-# File receive
+# RECEIVE FILE
 @app.on_message(filters.document | filters.video | filters.audio)
 async def handle_file(client, message):
     mode = user_mode.get(message.chat.id)
@@ -62,18 +75,24 @@ async def handle_file(client, message):
     msg = await message.reply("📥 Downloading...")
     start = time.time()
 
-    file_path = await message.download(progress=progress, progress_args=(msg, start))
+    file_path = await message.download(
+        progress=progress,
+        progress_args=(msg, start)
+    )
 
     if mode == "rename":
         user_files[message.chat.id] = file_path
         await msg.edit("✏️ Send new file name")
 
     elif mode == "info":
-        size = os.path.getsize(file_path) / (1024*1024)
-        await msg.edit(f"📄 File: {os.path.basename(file_path)}\n📦 Size: {size:.2f} MB")
+        size = os.path.getsize(file_path) / (1024 * 1024)
+        await msg.edit(
+            f"📄 File: {os.path.basename(file_path)}\n"
+            f"📦 Size: {size:.2f} MB"
+        )
         os.remove(file_path)
 
-# Rename
+# RENAME
 @app.on_message(filters.text)
 async def rename(client, message):
     if message.chat.id in user_files:
@@ -95,13 +114,27 @@ async def rename(client, message):
         os.remove(new)
         del user_files[message.chat.id]
 
-# Thumbnail
-@app.on_message(filters.command("setthumb") & filters.photo)
-async def set_thumb(client, message):
-    file = await message.download()
-    thumbs[message.chat.id] = file
-    await message.reply("✅ Thumbnail saved!")
+# SET THUMB (STEP 1)
+@app.on_message(filters.command("setthumb"))
+async def ask_thumb(client, message):
+    waiting_thumb[message.chat.id] = True
+    await message.reply("📸 Send a photo to set as thumbnail")
 
+# SAVE THUMB (STEP 2)
+@app.on_message(filters.photo)
+async def save_thumb(client, message):
+    if waiting_thumb.get(message.chat.id):
+        file = await message.download()
+        thumbs[message.chat.id] = file
+        waiting_thumb.pop(message.chat.id)
+
+        await message.reply(
+            "✅ Thumbnail saved!\n\n"
+            "Now send file and rename\n"
+            "Thumbnail will be added automatically"
+        )
+
+# DELETE THUMB
 @app.on_message(filters.command("delthumb"))
 async def del_thumb(client, message):
     if message.chat.id in thumbs:
@@ -111,6 +144,7 @@ async def del_thumb(client, message):
     else:
         await message.reply("No thumbnail found")
 
+# VIEW THUMB
 @app.on_message(filters.command("viewthumb"))
 async def view_thumb(client, message):
     if message.chat.id in thumbs:
