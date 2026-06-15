@@ -105,5 +105,27 @@ async def rename(client, message):
         del user_files[message.chat.id]
 
 app.run()
+thumbs = {}
 
+@app.on_message(filters.command("setthumb") & filters.photo)
+async def set_thumb(client, message):
+    file = await message.download()
+    thumbs[message.chat.id] = file
+    await message.reply("✅ Thumbnail saved!")
+
+@app.on_message(filters.command("delthumb"))
+async def del_thumb(client, message):
+    if message.chat.id in thumbs:
+        os.remove(thumbs[message.chat.id])
+        del thumbs[message.chat.id]
+        await message.reply("❌ Thumbnail deleted")
+    else:
+        await message.reply("No thumbnail found")
+
+@app.on_message(filters.command("viewthumb"))
+async def view_thumb(client, message):
+    if message.chat.id in thumbs:
+        await message.reply_photo(thumbs[message.chat.id])
+    else:
+        await message.reply("No thumbnail set")
 added pro ui
