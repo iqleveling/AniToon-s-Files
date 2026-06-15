@@ -1,4 +1,5 @@
 from pyrogram import Client, filters
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import os
 import time
 
@@ -7,7 +8,7 @@ API_HASH = os.environ.get("API_HASH")
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
 app = Client(
-    "fast_bot",
+    "pro_bot",
     api_id=API_ID,
     api_hash=API_HASH,
     bot_token=BOT_TOKEN,
@@ -16,59 +17,73 @@ app = Client(
 )
 
 user_files = {}
+user_mode = {}
 
-# Progress function
-async def progress(current, total, message, start_time):
-    now = time.time()
-    diff = now - start_time
-
-    if round(diff % 1) == 0:
-        percentage = current * 100 / total
-        speed = current / diff if diff > 0 else 0
-        await message.edit(
-            f"📊 Progress: {percentage:.2f}%\n"
-            f"⚡ Speed: {speed/1024/1024:.2f} MB/s\n"
-            f"📦 Done: {current/1024/1024:.2f} MB / {total/1024/1024:.2f} MB"
-        )
-
-# Start
+# Start with buttons
 @app.on_message(filters.command("start"))
 async def start(client, message):
-    await message.reply("🚀 Send file to rename (Fast Mode Enabled)")
+    buttons = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✏️ Rename File", callback_data="rename")],
+        [InlineKeyboardButton("📄 File Info", callback_data="info")]
+    ])
+    await message.reply("👋 Welcome to PRO BOT\nChoose an option:", reply_markup=buttons)
+
+# Button clicks
+@app.on_callback_query()
+async def callback(client, query):
+    if query.data == "rename":
+        user_mode[query.message.chat.id] = "rename"
+        await query.message.reply("📤 Send file to rename")
+
+    elif query.data == "info":
+        user_mode[query.message.chat.id] = "info"
+        await query.message.reply("📤 Send file to get info")
+
+# Progress function
+async def progress(current, total, message, start):
+    now = time.time()
+    diff = now - start
+
+    if round(diff % 1) == 0:
+        percent = current * 100 / total
+        await message.edit(f"📊 {percent:.2f}% completed")
 
 # Receive file
 @app.on_message(filters.document | filters.video | filters.audio)
-async def get_file(client, message):
+async def handle_file(client, message):
+    mode = user_mode.get(message.chat.id)
+
     msg = await message.reply("📥 Downloading...")
-
     start = time.time()
-    file_path = await message.download(
-        progress=progress,
-        progress_args=(msg, start)
-    )
 
-    user_files[message.chat.id] = file_path
-    await msg.edit("✏️ Send new file name")
+    file_path = await message.download(progress=progress, progress_args=(msg, start))
+
+    if mode == "rename":
+        user_files[message.chat.id] = file_path
+        await msg.edit("✏️ Send new file name")
+
+    elif mode == "info":
+        size = os.path.getsize(file_path) / (1024*1024)
+        await msg.edit(f"📄 File Name: {os.path.basename(file_path)}\n📦 Size: {size:.2f} MB")
+        os.remove(file_path)
 
 # Rename
 @app.on_message(filters.text)
-async def rename_file(client, message):
+async def rename(client, message):
     if message.chat.id in user_files:
-        old_file = user_files[message.chat.id]
-        new_name = message.text
+        old = user_files[message.chat.id]
+        new = message.text
 
-        os.rename(old_file, new_name)
+        os.rename(old, new)
 
         msg = await message.reply("📤 Uploading...")
-
         start = time.time()
-        await message.reply_document(
-            new_name,
-            progress=progress,
-            progress_args=(msg, start)
-        )
 
-        os.remove(new_name)
+        await message.reply_document(new, progress=progress, progress_args=(msg, start))
+
+        os.remove(new)
         del user_files[message.chat.id]
 
 app.run()
+
+added pro ui
