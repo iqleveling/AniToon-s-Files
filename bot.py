@@ -18,8 +18,9 @@ app = Client(
 
 user_files = {}
 user_mode = {}
+thumbs = {}  # ✅ FIXED POSITION
 
-# Start with buttons
+# Start
 @app.on_message(filters.command("start"))
 async def start(client, message):
     buttons = InlineKeyboardMarkup([
@@ -28,47 +29,32 @@ async def start(client, message):
     ])
     await message.reply("👋 Welcome to PRO BOT\nChoose an option:", reply_markup=buttons)
 
-# Button clicks
-    @app.on_callback_query()
+# Buttons
+@app.on_callback_query()
 async def callback(client, query):
     if query.data == "rename":
         user_mode[query.message.chat.id] = "rename"
-
-        text = (
-            "✏️ Rename Mode Activated\n\n"
-            "📌 How to use:\n"
-            "1. Send any file\n"
-            "2. Then send new file name\n\n"
-            "⚙️ Extra Features:\n"
-            "• /setthumb → Set thumbnail\n"
-            "• /delthumb → Delete thumbnail\n"
-            "• /viewthumb → View thumbnail\n\n"
-            "💡 Thumbnail will be added automatically!"
+        await query.message.reply(
+            "✏️ Rename Mode\n\n"
+            "1. Send file\n"
+            "2. Send new name\n\n"
+            "Commands:\n"
+            "/setthumb\n/delthumb\n/viewthumb"
         )
-
-        await query.message.reply(text)
-
-    elif query.data == "info":
-        user_mode[query.message.chat.id] = "info"
-        await query.message.reply("📄 Send file to get info")
-    if query.data == "rename":
-        user_mode[query.message.chat.id] = "rename"
-        await query.message.reply("📤 Send file to rename")
 
     elif query.data == "info":
         user_mode[query.message.chat.id] = "info"
         await query.message.reply("📤 Send file to get info")
 
-# Progress function
+# Progress
 async def progress(current, total, message, start):
     now = time.time()
     diff = now - start
-
     if round(diff % 1) == 0:
         percent = current * 100 / total
         await message.edit(f"📊 {percent:.2f}% completed")
 
-# Receive file
+# File receive
 @app.on_message(filters.document | filters.video | filters.audio)
 async def handle_file(client, message):
     mode = user_mode.get(message.chat.id)
@@ -84,7 +70,7 @@ async def handle_file(client, message):
 
     elif mode == "info":
         size = os.path.getsize(file_path) / (1024*1024)
-        await msg.edit(f"📄 File Name: {os.path.basename(file_path)}\n📦 Size: {size:.2f} MB")
+        await msg.edit(f"📄 File: {os.path.basename(file_path)}\n📦 Size: {size:.2f} MB")
         os.remove(file_path)
 
 # Rename
@@ -99,19 +85,17 @@ async def rename(client, message):
         msg = await message.reply("📤 Uploading...")
         start = time.time()
 
-await message.reply_document(
-    new,
-    thumb=thumbs.get(message.chat.id),
-    progress=progress,
-    progress_args=(msg, start)
-)
+        await message.reply_document(
+            new,
+            thumb=thumbs.get(message.chat.id),
+            progress=progress,
+            progress_args=(msg, start)
+        )
 
         os.remove(new)
         del user_files[message.chat.id]
 
-app.run()
-thumbs = {}
-
+# Thumbnail
 @app.on_message(filters.command("setthumb") & filters.photo)
 async def set_thumb(client, message):
     file = await message.download()
@@ -133,5 +117,5 @@ async def view_thumb(client, message):
         await message.reply_photo(thumbs[message.chat.id])
     else:
         await message.reply("No thumbnail set")
-added pro ui
-added thumbnail + instructions
+
+app.run()
