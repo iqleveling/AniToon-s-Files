@@ -99,7 +99,12 @@ async def rename(client, message):
         msg = await message.reply("📤 Uploading...")
         start = time.time()
 
-        await message.reply_document(new, progress=progress, progress_args=(msg, start))
+await message.reply_document(
+    new,
+    thumb=thumbs.get(message.chat.id),
+    progress=progress,
+    progress_args=(msg, start)
+)
 
         os.remove(new)
         del user_files[message.chat.id]
@@ -129,3 +134,4 @@ async def view_thumb(client, message):
     else:
         await message.reply("No thumbnail set")
 added pro ui
+added thumbnail + instructions
