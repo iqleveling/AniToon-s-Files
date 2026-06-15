@@ -29,8 +29,28 @@ async def start(client, message):
     await message.reply("👋 Welcome to PRO BOT\nChoose an option:", reply_markup=buttons)
 
 # Button clicks
-@app.on_callback_query()
+    @app.on_callback_query()
 async def callback(client, query):
+    if query.data == "rename":
+        user_mode[query.message.chat.id] = "rename"
+
+        text = (
+            "✏️ Rename Mode Activated\n\n"
+            "📌 How to use:\n"
+            "1. Send any file\n"
+            "2. Then send new file name\n\n"
+            "⚙️ Extra Features:\n"
+            "• /setthumb → Set thumbnail\n"
+            "• /delthumb → Delete thumbnail\n"
+            "• /viewthumb → View thumbnail\n\n"
+            "💡 Thumbnail will be added automatically!"
+        )
+
+        await query.message.reply(text)
+
+    elif query.data == "info":
+        user_mode[query.message.chat.id] = "info"
+        await query.message.reply("📄 Send file to get info")
     if query.data == "rename":
         user_mode[query.message.chat.id] = "rename"
         await query.message.reply("📤 Send file to rename")
