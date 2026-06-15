@@ -2,6 +2,8 @@ from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import os
 import time
+import subprocess
+from PIL import Image
 
 API_ID = int(os.environ.get("API_ID"))
 API_HASH = os.environ.get("API_HASH")
@@ -20,6 +22,7 @@ user_files = {}
 user_mode = {}
 thumbs = {}
 waiting_thumb = {}
+auto_rename = {}
 
 # START
 @app.on_message(filters.command("start"))
@@ -51,7 +54,10 @@ async def callback(client, query):
             "⚙️ Commands:\n"
             "/setthumb - Set thumbnail\n"
             "/viewthumb - View thumbnail\n"
-            "/delthumb - Delete thumbnail"
+            "/delthumb - Delete thumbnail\n"
+            "/autorename name.mp4\n"
+            "/toaudio (reply to video)\n"
+            "/topdf (reply to image)"
         )
 
     elif query.data == "info":
@@ -62,7 +68,6 @@ async def callback(client, query):
 async def progress(current, total, message, start):
     now = time.time()
     diff = now - start
-
     if round(diff % 1) == 0:
         percent = current * 100 / total
         await message.edit(f"📊 {percent:.2f}% completed")
@@ -97,7 +102,7 @@ async def handle_file(client, message):
 async def rename(client, message):
     if message.chat.id in user_files:
         old = user_files[message.chat.id]
-        new = message.text
+        new = auto_rename.get(message.chat.id, message.text)
 
         os.rename(old, new)
 
@@ -114,13 +119,13 @@ async def rename(client, message):
         os.remove(new)
         del user_files[message.chat.id]
 
-# SET THUMB (STEP 1)
+# SET THUMB
 @app.on_message(filters.command("setthumb"))
 async def ask_thumb(client, message):
     waiting_thumb[message.chat.id] = True
     await message.reply("📸 Send a photo to set as thumbnail")
 
-# SAVE THUMB (STEP 2)
+# SAVE THUMB
 @app.on_message(filters.photo)
 async def save_thumb(client, message):
     if waiting_thumb.get(message.chat.id):
@@ -129,9 +134,7 @@ async def save_thumb(client, message):
         waiting_thumb.pop(message.chat.id)
 
         await message.reply(
-            "✅ Thumbnail saved!\n\n"
-            "Now send file and rename\n"
-            "Thumbnail will be added automatically"
+            "✅ Thumbnail saved!\nNow send file and rename"
         )
 
 # DELETE THUMB
@@ -151,5 +154,49 @@ async def view_thumb(client, message):
         await message.reply_photo(thumbs[message.chat.id])
     else:
         await message.reply("No thumbnail set")
+
+# AUTO RENAME
+@app.on_message(filters.command("autorename"))
+async def set_auto(client, message):
+    text = message.text.split(" ", 1)
+
+    if len(text) < 2:
+        return await message.reply("Usage:\n/autorename filename.mp4")
+
+    auto_rename[message.chat.id] = text[1]
+    await message.reply(f"✅ Auto rename set: {text[1]}")
+
+# VIDEO → AUDIO
+@app.on_message(filters.command("toaudio") & filters.reply)
+async def video_to_audio(client, message):
+    msg = await message.reply("🎵 Converting...")
+
+    file = await message.reply_to_message.download()
+    output = file + ".mp3"
+
+    subprocess.call(f"ffmpeg -i '{file}' '{output}' -y", shell=True)
+
+    await message.reply_audio(output)
+
+    os.remove(file)
+    os.remove(output)
+    await msg.delete()
+
+# IMAGE → PDF
+@app.on_message(filters.command("topdf") & filters.reply)
+async def image_to_pdf(client, message):
+    msg = await message.reply("📄 Creating PDF...")
+
+    file = await message.reply_to_message.download()
+    image = Image.open(file).convert("RGB")
+
+    pdf_path = file + ".pdf"
+    image.save(pdf_path)
+
+    await message.reply_document(pdf_path)
+
+    os.remove(file)
+    os.remove(pdf_path)
+    await msg.delete()
 
 app.run()
